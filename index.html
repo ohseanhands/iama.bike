@@ -1,0 +1,391 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <title>iama.bike</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin:0; padding:0; } /* to remove the top and left whitespace */
+
+        html, body { width:100%; height:100%; } /* just to be sure these are full screen*/
+
+        canvas { display:block; } /* To remove the scrollbars */
+        
+        h1 {
+            position: absolute;
+            margin: auto;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 50pt;
+            color: white;
+            margin-top: 50px;
+        }
+    </style>
+  </head>
+  <body>
+      <h1>iama.bike</h1>
+    <canvas id="the-canvas" width="100" height="100"></canvas>
+    <script>
+        
+        
+        // Define classes
+        var SceneObject = function() {
+            this.position = {
+                x: 0,
+                y: 0
+            };
+            this.rotation = 0;
+            this.scale = {
+                x: 1,
+                y: 1
+            };
+            this.skew = {
+                x: 0,
+                y: 0
+            };
+            this.depth = 0;
+        };
+        
+        function depthSorter(a, b) {
+            return (a.depth - b.depth);
+        }
+        
+        SceneObject.prototype.render = function(c) {
+            c.translate(this.position.x, this.position.y);
+            c.rotate(this.rotation);
+            c.transform(1, this.skew.x, this.skew.y, 1, 0, 0);
+            c.scale(this.scale.x, this.scale.y);
+        };
+        SceneObject.prototype.animate = function(dTime) {
+            
+        };
+        SceneObject.prototype.setPosition = function(position) {
+            this.position = position;
+        };
+        SceneObject.prototype.setRotation = function(rotation) {
+            this.rotation = rotation;
+        };
+        SceneObject.prototype.setScale = function(scale) {
+            this.scale = scale;
+        };
+        SceneObject.prototype.setSkew = function(skew) {
+            this.skew = skew;
+        };
+        SceneObject.prototype.setDepth = function(depth) {
+            this.depth = depth;
+        };
+        
+        function Scene() {
+            SceneObject.call(this);
+            this.sceneObjs = [];
+        };
+        
+        Scene.prototype = Object.create(SceneObject.prototype);
+        
+        Scene.prototype.constructor = Scene;
+        
+        Scene.prototype.addObject = function(o) {
+            this.sceneObjs.push(o);
+            this.sceneObjs.sort(depthSorter);
+        };
+        
+        Scene.prototype.removeObject = function(o) {
+            var index = this.sceneObjs.indexOf(o);
+            if (index > -1) {
+                this.sceneObjs.splice(index, 1);
+            }
+        };
+        
+        Scene.prototype.render = function(c) {
+            SceneObject.prototype.render.call(this, c);
+            for (var i = 0; i < this.sceneObjs.length; i++) {
+                c.save();
+                this.sceneObjs[i].render(c);
+                c.restore();
+            }
+        };
+        
+        Scene.prototype.animate = function(dTime) {
+            SceneObject.prototype.animate.call(this, dTime);
+            for (var i = 0; i < this.sceneObjs.length; i++) {
+                this.sceneObjs[i].animate(dTime);
+            }
+        };
+        
+        function Ground(height) {
+            SceneObject.call(this);
+            this.color = {
+                r: 0,
+                g: 255,
+                b: 100
+            };
+            this.height = height;
+        }
+        Ground.prototype = Object.create(SceneObject.prototype);
+        Ground.prototype.constructor = Ground;
+        Ground.prototype.render = function(c) {
+            SceneObject.prototype.render.call(this, c);
+            c.fillStyle = rgbObjectToString(this.color);
+            c.fillRect(-renderer.width / 2, this.height, renderer.width, (renderer.height / 2) - this.height);
+        };
+        
+        function Road(top, bottom) {
+            SceneObject.call(this);
+            this.color = {
+                r: 200,
+                g: 200,
+                b: 200
+            };
+            this.top = top;
+            this.bottom = bottom;
+        }
+        Road.prototype = Object.create(SceneObject.prototype);
+        Road.prototype.constructor = Road;
+        Road.prototype.render = function(c) {
+            SceneObject.prototype.render.call(this, c);
+            c.fillStyle = rgbObjectToString(this.color);
+            c.fillRect(-renderer.width / 2, this.top, renderer.width, this.bottom - this.top);
+        };
+        
+        function Spoke(color, size) {
+            SceneObject.call(this);
+            this.color = color;
+            this.size = size;
+        }
+        Spoke.prototype = Object.create(SceneObject.prototype);
+        Spoke.prototype.constructor = Spoke;
+        Spoke.prototype.render = function(c) {
+            SceneObject.prototype.render.call(this, c);
+            c.fillStyle = rgbObjectToString(this.color);
+            c.fillRect(-this.size, -0.25, this.size, 0.5);
+        };
+        
+        function Wheel(color, size) {
+            SceneObject.call(this);
+            this.color = color;
+            this.size = size;
+            this.spokes = [];
+            for (var i = 0; i < 3; i++) {
+                var s = new Spoke(color, size);
+                s.setRotation((Math.PI * 2 * i) / 3);
+                this.spokes.push(s);
+            }
+        }
+        Wheel.prototype = Object.create(SceneObject.prototype);
+        Wheel.prototype.constructor = Wheel;
+        Wheel.prototype.render = function(c) {
+            SceneObject.prototype.render.call(this, c);
+            for (var i = 0; i < 3; i++) {
+                c.save();
+                this.spokes[i].render(c);
+                c.restore();
+            }
+            
+            c.beginPath();
+            c.arc(0, 0, this.size, 0, Math.PI * 2);
+            c.strokeStyle = rgbObjectToString(this.color);
+            c.lineWidth = 0.75;
+            c.stroke();
+            c.closePath();
+        };
+        
+        function Frame(color) {
+            SceneObject.call(this);
+            this.color = color;
+        }
+        Frame.prototype = Object.create(SceneObject.prototype);
+        Frame.prototype.constructor = Frame;
+        Frame.prototype.render = function(c) {
+            SceneObject.prototype.render.call(this, c);
+            c.beginPath();
+            c.strokeWidth = 0.25;
+            c.strokeStyle = rgbObjectToString(this.color);
+            c.moveTo(8.75, -1.5);
+            c.lineTo(-8, -1.5);
+            c.lineTo(-11, 7);
+            c.lineTo(-2, 7.5);
+            c.lineTo(9, -1.5);
+            c.moveTo(11, 7);
+            c.lineTo(9, -1.5);
+            c.quadraticCurveTo(8, -8, 4, -6);
+            c.moveTo(-6, -1.5);
+            c.lineTo(-6, -3);
+            c.strokeStyle = rgbObjectToString(this.color);
+            c.lineWidth = 0.75;
+            c.stroke();
+            
+            // draw seat
+            c.bezierCurveTo(-11, -2, -11, -5, -6, -5);
+            c.bezierCurveTo(-1, -5, -1, -4, -6, -3);
+            c.stroke();
+            c.closePath();
+        };
+        
+        function Bicycle(color) {
+            SceneObject.call(this);
+            this.color = color;
+            this.depth = 100;
+            this.frame = new Frame(color);
+            this.wheelLeft = new Wheel({r: 100, g: 100, b: 100}, 5);
+            this.wheelRight = new Wheel({r: 100, g: 100, b: 100}, 5);
+            
+            this.wheelLeft.setPosition({ x: -11, y: 7});
+            this.wheelRight.setPosition({ x: 11, y: 7});
+        }
+        Bicycle.prototype = Object.create(SceneObject.prototype);
+        Bicycle.prototype.constructor = Bicycle;
+        Bicycle.prototype.render = function(c) {
+            SceneObject.prototype.render.call(this, c);
+            c.save();
+            this.wheelLeft.render(c);
+            c.restore(); c.save();
+            this.wheelRight.render(c);
+            c.restore();
+            this.frame.render(c);
+        };
+        Bicycle.prototype.animate = function(dTime) {
+            this.wheelLeft.setRotation((2 * Math.PI) * (dTime / 60) / 10);
+            this.wheelRight.setRotation((2 * Math.PI) * (dTime / 60) / 10);
+        };
+        
+        
+        var renderer = {};
+        var animator = {};
+        var scene = {};
+        
+        function init() {
+            setupScene();
+            setupAnimator(animateFrame);
+            setupRenderer(renderFrame);
+            
+            begin();
+        }
+        
+        var ground = new Ground(10);
+        var road = new Road(15, 20);
+        var bicycle = new Bicycle({r: 200, g: 0, b: 0});
+        bicycle.setPosition({x: 0, y: 0});
+        bicycle.setScale({x: 1.5, y: 1.5});
+        
+        function setupScene() {
+            scene = new Scene();
+            scene.addObject(ground);
+            scene.addObject(road);
+            scene.addObject(bicycle);
+        }
+        
+        function setupAnimator(animationFunction) {
+            var delayCall = function(func, delay) {
+                window.setTimeout(func, delay);
+            };
+            
+            animator = {
+                targetFPS: 60,
+                currentFPS: 0,
+                speed: 1.0,
+                lastTime: 0,
+                animating: false,
+                animFunc: animationFunction,
+                animLoop: function() {
+                    if (!animator.animating) return;
+                    
+                    var curTime = +new Date();
+                    var dTime = curTime - animator.lastTime;
+                    
+                    currentFPS = 1000 / dTime;
+                    
+                    animator.animFunc(dTime * animator.speed);
+                    delayCall(animator.animLoop, 1000 / animator.targetFPS);
+                },
+                play: function() {
+                    animator.lastTime = +new Date();
+                    animator.animating = true;
+                    delayCall(animator.animLoop, 1000 / animator.targetFPS);
+                },
+                pause: function() {
+                    animator.animating = false;
+                }
+            };
+        }
+
+        function setupRenderer(renderFunction) {
+            var canvas = document.getElementById('the-canvas');
+            var context = canvas.getContext('2d');
+            renderer = {
+                can: canvas,
+                ctx: context,
+                width: 0,
+                height: 0,
+                clearColor: '#00aaff',
+                renderFunc: renderFunction,
+                renderLoop: function() {
+                    width = window.innerWidth;
+                    height = window.innerHeight;
+                    renderer.ctx.canvas.width  = width;
+                    renderer.ctx.canvas.height = height;
+                    renderer.ctx.translate(width/2, height/2);
+                    
+                    var scaleW = 1, scaleH = 1;
+                    if (width < height) {
+                        scaleW = width / 100;
+                        scaleH = height / (100 * (height / width));
+                    } else {
+                        scaleH = height / 100;
+                        scaleW = width / (100 * (width / height));
+                    }
+                    
+                    renderer.width = width / scaleW;
+                    renderer.height = height / scaleH;
+                    
+                    renderer.ctx.transform(scaleW, 0, 0, scaleH, 0, 0);
+                    // Clear the canvas
+                    renderer.ctx.fillStyle = '#00aaff';
+                    renderer.ctx.fillRect(-renderer.width/2,-renderer.height/2,renderer.width, renderer.height);
+                    renderer.ctx.save();
+                    renderer.renderFunc(renderer.can, renderer.ctx);
+                    renderer.ctx.restore();
+                    requestAnimFrame(renderer.renderLoop);
+                }
+            };
+        }
+        
+        function begin() {
+            renderer.renderLoop();
+            animator.play();
+        }
+        
+        function renderFrame(canvas, ctx) {
+            scene.render(ctx);
+        }
+        
+        function animateFrame(dTime) {
+            scene.animate(dTime);
+        }
+        
+        
+        
+        // Helper funtions
+        function toRadians (angle) {
+            return angle * (Math.PI / 180);
+        }
+        function rgbToString(r, g, b) {
+            return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
+        function rgbObjectToString(colorObject) {
+            return rgbToString(colorObject.r, colorObject.g, colorObject.b);
+        }
+
+
+        // fallback for rendering
+        window.requestAnimFrame = (function(callback) {
+          return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+          function(callback) {
+            window.setTimeout(callback, 1000 / 60);
+          };
+        })();
+        
+        window.onload = init;
+    </script>
+  </body>
+</html>
